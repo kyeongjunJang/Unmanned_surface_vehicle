@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+<!--211Node-->
+	<node pkg="tricat_211"  type="docking.py" name="Docking" respawn="true" output="screen"/>
+	<node pkg="tricat_211"  type="gps_converter.py" name="ENU_Converter" respawn="true"/>
+	<node pkg="tricat_211"  type="compass_from_magnetic_field.py" name="Compass" respawn="true"/>
+
+<!--PARAMETER-->
+	<rosparam command="load" file="$(find tricat_211)/params/docking_param.yaml"/>
+
+<!--CAMERA-->
+	<include file="$(find realsense2_camera)/launch/rs_camera.launch">
+	</include>
+	<include file="$(find darknet_ros)/launch/darknet_ros_test.launch">
+	</include>	
+
+<!--LiDAR-->
+	<node name="rplidarNode"          pkg="rplidar_ros"  type="rplidarNode" output="screen">
+	    <param name="serial_port"         type="string" value="/dev/ttyLiDAR"/>  
+	    <param name="serial_baudrate"     type="int"    value="256000"/>
+	    <param name="frame_id"            type="string" value="laser"/>
+	    <param name="inverted"            type="bool"   value="false"/>
+	    <param name="angle_compensate"    type="bool"   value="true"/>
+	    <param name="scan_mode"           type="string" value="Stability"/>
+	</node>
+  <!--<node name="rviz" pkg="rviz" type="rviz" args="-d $(find tricat_211)/rviz/laser.rviz" />-->
+
+<!--IMU-->
+	<node pkg="myahrs_driver" type="myahrs_driver" name="myahrs_driver">
+  	    <param name="port" value="/dev/ttyIMU" />
+	    <param name="baud_rate" value="115200" />
+ 	</node>
+
+<!--Arduino-->
+	<node pkg="tricat_211" type="serial_node.py" name="ARDUINO" args="/dev/ttyARDUINO" respawn="true"/>
+
+<!--RQT graph
+	<node name="rqt" pkg="rqt_graph" type="rqt_graph"/>-->
+</launch>
+
+

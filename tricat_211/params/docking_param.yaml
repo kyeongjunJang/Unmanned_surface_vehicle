@@ -1,0 +1,51 @@
+docking_param : {
+  target_class : "square",
+  extra_span : 0.2,
+  close_distance : 2.0,
+  docking_zone_gps1 : [35.0696411, 128.5788397, 43.0],
+  docking_zone_gps2 : [35.0696411, 128.5788397, 43.0],
+  map_00_lat : 35.0693571,
+  map_00_lon : 128.5789111,
+  map_00_alt : 43.0,
+  docking_zone_range : 1.0,
+
+  point_1 : [[35.0696411, 128.5788397, 43.0], [35.0696442,128.5788795, 43.0]], #, [35.0696470, 128.5789041, 43.0]]
+  point_2 : [[35.0695987, 128.5788595, 43.0], [35.0696097,128.5788842, 43.0]], #, [35.0696176, 128.5789126, 43.0]]
+  point_3 : [[35.0695841, 128.5788596, 43.0], [35.0695938,128.5789037, 43.0], [35.0695991, 128.5789242, 43.0]]
+}
+
+kp_servo : 0.4
+kd_servo : 0.0
+
+#thruster_power : 1600
+
+# red square
+# red circle
+# red triangle
+# green square
+# green circle
+# green tricangle
+# blue square
+# blue circle
+# blue triangle
+
+map_dd : {
+  map_00_lat : 35.0693571,
+  map_00_lon : 128.5789111,
+  map_00_alt : 43.0
+  }
+
+
+goal_range : 1.0
+# for `Waypoints` reached judgement
+
+#kp_servo : 0.4
+ki_servo : 0.00 # max 0.05?
+#kd_servo : 0.0
+
+kp_distance : 40
+
+thruster_power : 1600
+
+min_power : 1600
+

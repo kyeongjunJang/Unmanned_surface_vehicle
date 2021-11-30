@@ -1,0 +1,23 @@
+map_dd : {
+  map_00_lat : 35.0693481445,
+  map_00_lon : 128.578938801667,
+  map_00_alt : 53.0
+  }
+
+waypoint_List: {  # kyeong jun notion 
+  waypoints:
+  [ 
+    [35.0693727, 128.5789498, 52.0],
+    [35.0693788, 128.5789748 , 52.0],
+    [35.0696547, 128.5788247, 52.0]
+
+  ],
+  }
+
+goal_range : 1.8
+# for `Waypoints` reached judgement
+
+kp_servo : 0.4
+kd_servo : 0.0
+
+thruster_power : 1620
