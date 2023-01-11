@@ -1,0 +1,12 @@
+float64 curPosX
+float64 curPosY
+float64 bearing
+float64 nextGoalX
+float64 nextGoalY
+float64 trajectory0X
+float64 trajectory0Y
+float64 rotateAngle
+float64 errorAngle
+float64 servoControl
+tricat_211/EnuObstacle[] obList
+tricat_211/EnuTrajectory[] trajectory

@@ -1,0 +1,4 @@
+DOCKING : {
+target_class : "Circle", #temp
+min_confidence : 0.7 #0~1
+}

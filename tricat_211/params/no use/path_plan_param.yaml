@@ -1,0 +1,46 @@
+path_plan : {
+kp_servo : 0.2,
+
+origin_point : [37.4480333, 126.6534, 30.0],
+edge_points : [
+    [37.4480333, 126.6534, 30.0],
+    [37.4479666, 126.65351666, 30.0],
+    [37.4484333, 126.6538, 30.0],
+    [37.4485, 126.6537, 30.0]
+],
+
+obstacle_search_range : 1.5,
+
+end_points : [
+    [37.4480499, 126.653475, 30.0],
+    [37.4481335, 126.6535309, 30.0],
+    [37.4480499, 126.653475, 30.0],
+    [37.4481335, 126.6535309, 30.0],
+    [37.4480499, 126.653475, 30.0],
+    [37.4481335, 126.6535309, 30.0]
+],
+
+predict_step : 5,
+predict_step_size : 1.0,
+
+g_value_rotate_gain_0 : 1,
+g_value_rotate_gain_30 : 2.0,
+g_value_rotate_gain_60 : 3.0,
+g_value_rotate_gain_90 : 4.0,
+h_value_gain : 1,
+
+arrival_range : 1.5,
+
+thruster_power : 1650
+}
+
+Obstacle : {
+obstacle_search_range : 4.0,
+min_wall_length : 1.0
+}
+
+map_dd : {
+  map_00_lat : 37.4480333,
+  map_00_lon : 126.6534,
+  map_00_alt : 30.0
+}

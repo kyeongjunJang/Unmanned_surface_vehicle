@@ -2,7 +2,8 @@
 
 <launch>
 <!--211Node-->
-	<node pkg="tricat_211"  type="docking.py" name="Docking" respawn="true" output="screen"/>
+<!--	<node pkg="tricat_211"  type="docking_and_fuzzy_final.py" name="Docking" respawn="true" output="screen"/>-->
+	<node pkg="tricat_211"  type="docking_plan_b.py" name="Docking" respawn="true" output="screen"/>
 	<node pkg="tricat_211"  type="gps_converter.py" name="ENU_Converter" respawn="true"/>
 	<node pkg="tricat_211"  type="compass_from_magnetic_field.py" name="Compass" respawn="true"/>
 

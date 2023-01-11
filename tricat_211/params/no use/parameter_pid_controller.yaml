@@ -1,0 +1,11 @@
+PID : {
+kp_thruster : 50.0,
+ki_thruster : 0.1,
+kd_thruster : 0.01,
+
+kp_servo : 1.0,
+ki_servo : 0.01
+kd_servo : 0.01
+
+rate : 20
+}

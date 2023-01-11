@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+<!--211Node-->
+	<node pkg="tricat_211"  type="compass_from_magnetic_field.py" name="Compass" respawn="true"/>
+
+
+<!--PARAMETER-->
+	<rosparam command="load" file="$(find tricat_211)/params/hopping_param.yaml"/>
+
+<!--IMU-->
+	<node pkg="myahrs_driver" type="myahrs_driver" name="myahrs_driver">
+  	    <param name="port" value="/dev/ttyIMU" />
+	    <param name="baud_rate" value="115200" />
+ 	    </node>
+
+<!--RQT graph-->
+	<node name="rqt" pkg="rqt_graph" type="rqt_graph"/>
+</launch>

@@ -1,0 +1,25 @@
+map_dd : {
+  map_00_lat : 37.448002351837694, #pool 1 and pool 2 posibility
+  map_00_lon : 126.6533954619325,
+  map_00_alt : 20.0,
+  map_0y_lat : 37.45125514649911,
+  map_0y_lon : 126.65556670709458,
+  map_x0_lat : 37.45123704721054,
+  map_x0_lon : 126.65539705738055,
+  map_xy_lat : 37.451199251623244, 
+  map_xy_lon : 126.65554189666211
+  }
+
+waypoint_List: {
+  waypoints:
+  [ 
+    [ 'lat', 'lon' ],
+    [ 'lat', 'lon']
+  ],
+  }
+
+
+waypoint_distance_tolerance : 1.2
+# for `Waypoints` reached judgement
+
+Waiting_time_on_waypoint : 0.5 #sec

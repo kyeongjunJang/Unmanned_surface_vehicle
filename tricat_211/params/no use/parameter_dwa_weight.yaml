@@ -1,0 +1,27 @@
+DWA : {
+max_speed : 1.0,  #[m/s]
+min_speed : -0.5, #[m/s]
+
+max_accel : 0.2, #[m/ss]
+
+max_yaw_rate : 40.0, # * math.pi / 180.0  # [rad/s]
+
+max_delta_yaw_rate : 40.0, # * math.pi / 180.0  # [rad/ss]
+
+v_resolution : 0.01,  # [m/s]
+yaw_rate_resolution : 0.1, # * math.pi / 180.0  # [rad/s]
+
+dt : 0.1,  # [s] Time tick for motion prediction
+predict_time : 3.0, # [s]
+
+to_goal_cost_gain : 2.0,
+speed_cost_gain : 0.5,
+obstacle_cost_gain : 1.0,
+
+stuck_flag_cons : 0.01,  # constant to prevent robot stucked
+boat_width : 0.8, # [m] for collision check
+boat_length : 1.4,
+
+goal_range : 1 # [m] for goal check
+}
+

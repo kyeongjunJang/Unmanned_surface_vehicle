@@ -1,0 +1,87 @@
+OB : {
+decision_range : 4, #[m]
+ # min_confidence : 0.7 #0~1
+min_wall_length : 1
+}
+
+map_dd : {
+map_00_lat : 37.4480333, 
+map_00_lon : 126.6534,
+map_00_alt : 30.0
+}
+
+edge_dd : {
+  map_00_lat : 37.4480333,
+  map_00_lon : 126.6534,
+  map_0y_lat : 37.4485,
+  map_0y_lon : 126.6537,
+  map_x0_lat : 37.4479666,
+  map_x0_lon : 126.65351666,
+  map_xy_lat : 37.4484333,
+  map_xy_lon : 126.6538,
+  alt : 30.0
+  }
+
+waypoint_List: {  # kyeong jun notion 
+  waypoints:
+  [ 
+    #[37.4480288, 126.6535068, 30.0],
+    #[37.4481257, 126.6535728, 30.0],
+    #[37.4481418, 126.6535064, 30.0],
+    #[37.448033, 126.6534453, 30.0]
+    [37.4480499, 126.653475, 30.0],
+    [37.4481335, 126.6535309, 30.0],
+    [37.4480499, 126.653475, 30.0],
+    [37.4481335, 126.6535309, 30.0],
+    [37.4480499, 126.653475, 30.0],
+    [37.4481335, 126.6535309, 30.0]
+  ]
+  }
+
+
+DWA : {
+max_speed : 0.9,  #[m/s]
+min_speed : 0.3, #[m/s]
+
+max_accel : 3.0, #[m/ss]
+
+max_yaw_rate : 30.0, # * math.pi / 180.0  # [rad/s]
+
+max_delta_yaw_rate : 60.0, # * math.pi / 180.0  # [rad/ss]
+
+v_resolution : 0.1,  # [m/s]
+yaw_rate_resolution : 1, # * math.pi / 180.0  # [rad/s]
+
+dt : 0.1,  # [s] Time tick for motion prediction
+predict_time : 2.0, # [s]
+
+to_goal_cost_gain : 3.0,
+speed_cost_gain : 1.0,
+obstacle_cost_gain : 2.0,
+
+stuck_flag_cons : 0.0001,  # constant to prevent robot stucked
+boat_width : 0.8, # [m] for collision check
+boat_length : 1.4,
+
+goal_range : 1.0, # [m] for goal check
+
+safey_distance : 1.0
+}
+
+PID : {
+kp_thruster : 30.0,
+ki_thruster : 1,
+kd_thruster : 0.1,
+
+kp_servo : 3,
+ki_servo : 0.1,
+kd_servo : 0.01,
+
+rate : 0.1 # = 1 / rate
+}
+
+
+DOCKING : {
+target_class : "REDCIRCLE", #temp
+min_confidence : 0.5 #0~1
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+
+<!--Arduino-->
+	<node pkg="tricat_211" type="serial_node.py" name="arduino" args="/dev/ttyARDUINO" respawn="true"/>
+
+</launch>

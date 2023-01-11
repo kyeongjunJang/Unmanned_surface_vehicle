@@ -17,6 +17,13 @@ from geometry_msgs.msg import Point
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 
+################################         checklist         ################################
+# confidence 조정
+# GPS 위치를 아예 도킹 영역 안쪽에 해둬야 할 듯
+# PID 넣을까
+# 멀리/가까이 있을 때 각도가 +- 15도 범위 오차 크지 않은가...? 가운데라 인식하는 범위를 좀 더 좁게 잡을까
+# 거리와 각도를 동시에 고려해서 틀어지는 각도 정하도록 -> 삼각형 넓이 공식으로 가능은 하나, 최대/최솟값 찾아서 비례식 세우는 게 문제
+
 
 def RAD2DEG(x):
     return x * 180. / math.pi
@@ -31,6 +38,8 @@ def LiDARDEG2DEG(x):
         x = 180 - x
     return x
 
+
+################################         Fuzzy         ################################
 class Fuzzy:
     def __init__(self):
         self.boat_x = 0.0
@@ -217,15 +226,15 @@ class Fuzzy:
         angle['PM'] = fuzz.trimf(angle.universe, [15, 25, 40])
         angle['PL'] = fuzz.trimf(angle.universe, [30, 40, 70])
         
-        target_servo['RRRR'] = fuzz.trimf(target_servo.universe, [-30, -30, -22])
-        target_servo['RRR'] = fuzz.trimf(target_servo.universe, [-24, -18, -12])
+        target_servo['RRRR'] = fuzz.trimf(target_servo.universe, [-30, -30, -23])
+        target_servo['RRR'] = fuzz.trimf(target_servo.universe, [-26, -19, -12])
         target_servo['RR'] = fuzz.trimf(target_servo.universe, [-16, -11, -5])
         target_servo['R'] = fuzz.trimf(target_servo.universe, [-9, -4, 0])
         target_servo['N'] = fuzz.trimf(target_servo.universe, [0, 0, 0])
         target_servo['L'] = fuzz.trimf(target_servo.universe, [0, 4, 9])
         target_servo['LL'] = fuzz.trimf(target_servo.universe, [5, 11, 16])
-        target_servo['LLL'] = fuzz.trimf(target_servo.universe, [12, 18, 24])
-        target_servo['LLLL'] = fuzz.trimf(target_servo.universe, [22, 30, 30])
+        target_servo['LLL'] = fuzz.trimf(target_servo.universe, [12, 19, 26])
+        target_servo['LLLL'] = fuzz.trimf(target_servo.universe, [23, 30, 30])
 
         #ob_distance = min(self.ranges)
         #ob_angle = LiDARDEG2DEG(RAD2DEG(self.angle_min + self.angle_increment * self.idx))
@@ -310,7 +319,7 @@ class Fuzzy:
             print('-------------------------------------')
 
 
-######################### docking ###############################
+################################         Docking         ################################
 class Docking:
     def __init__(self):
         ### ROS Pub
@@ -318,383 +327,242 @@ class Docking:
         self.thruster_pub = rospy.Publisher("/thruster", UInt16, queue_size=10)
         self.print_node = rospy.Publisher("/print", DockingPrint, queue_size=10)
 
+        ### Hyper-Parameters
+        self.docking_config = rospy.get_param("docking_param")
+        self.target_class = self.docking_config['target_class']
+
+        ### Camera(mark)
         rospy.Subscriber('/darknet_ros/bounding_boxes', BoundingBoxes, self.boxes_callback)
         rospy.Subscriber('/darknet_ros/detection_image', Image, self.image_callback)
-        #rospy.Subscriber("/camera/depth/image_rect_raw", Image, self.convert_depth_image)
+        rospy.Subscriber("/camera/depth/image_rect_raw", Image, self.convert_depth_image)
 
-        self.docking_config = self.docking_config = rospy.get_param("docking_param")
-        self.target_class = self.docking_config['target_class']
-        
-
-        self.checked_mark = 0
         self.classes = []
         self.img_width = 0
-        self.hopping_ing = 0
-        self.mark_state = ""
-        self.forward_or_backward = ""
-        self.is_target_result = ""
-        
+        self.img_height = 0
+        self.box_center_x = 0
+        self.box_center_y = 0
+        self.box_depth = 0
 
-    def image_callback(self, msg):
-        self.img_width = msg.width
+        self.close_distance = self.docking_config['close_distance'] #조정하기
+        self.mark_state = 0    #0:None, 1:mark exist&not target, 2:target far, 3:target close
+        self.target_loc = "None"
+        self.first_box_position = "None"
+        
+        ### LiDAR(obstacle)
+        rospy.Subscriber("/scan", LaserScan, self.lidar_callback)
+        self.ranges = []
+        self.ob_state = 0      #0:None or far, 1:ob close
+
+        ### Control
+        self.servo = 94
+        self.thruster = 1600
 
     def boxes_callback(self, msg):
         boxes = msg.bounding_boxes
         if len(boxes)==0:
-            ##### 아주 느린 속도로 전진?????
-            pass
+            self.mark_state = 0
         else:
             self.classes = []
             for i in range(len(boxes)):
                 self.classes.append(boxes[i].Class)
+
             if self.target_class in self.classes:
-                self.target_center_x = abs(boxes[i].xmax + boxes[i].xmin)/2
+                self.box_size = (boxes[i].xmax-boxes[i].xmin) * (boxes[i].ymax-boxes[i].ymin)
+                self.box_center_x = float((boxes[i].xmax+boxes[i].xmin)/2)
+                self.box_center_y = float((boxes[i].ymax+boxes[i].ymin)/2)
 
-    # def checked_mark_update(self):
-    #     self.checked_mark.append(1)
-
-    def search_station(self):
-        if self.checked_mark==0: #if len(self.checked_mark)==0:
-            #아직 아무데도 안 감. 7->4번 가야 함
-            return 1
-        elif self.checked_mark==1: #len(self.checked_mark)==1:
-            #첫 번째 확인 마침. 두 번째 스테이션 가야 함
-            return 2
-        elif self.checked_mark==2:
-            #두 번째 확인 마침. 세 번째 스테이션 가야 함
-            return 3
-        else:
-            return 4
-
-    def is_target(self):
-        while 1:
-            if len(self.classes) > 0 :
-                if self.target_class in self.classes:
-                    # self.target_center_x = abs(boxes[i].xmax + boxes[i].xmin)/2
-                    if self.is_center():
-                        ####우리가 원하는 마크임 --- 전진 명령
-                        self.go_forward()
-                    else:
-                        ### 마크는 맞지만 이 스테이션이 아님--- 후진 명령
-                        # self.go_backward()
-                        self.checked_mark = self.checked_mark + 1
-                        print(self.checked_mark)
-                        
+                self.target_distance = self.box_depth * 0.001 #mm -> m
+                if self.target_distance <= self.close_distance:
+                    self.mark_state = 3
                 else:
-                    # 우리 마크가 아님-------후진 명령
-                    # self.go_backward()
-                    self.checked_mark = self.checked_mark + 1
-                    print(self.checked_mark)
-                break
-            # else: #
-            #     continue #
+                    self.mark_state = 2
+                self.target_center_x = abs(boxes[i].xmax + boxes[i].xmin)/2
+            else:
+                self.mark_state = 1
+            
+    def image_callback(self, msg):
+        self.img_width = msg.width
+        self.img_height = msg.height
 
-    def is_center(self):
-        line1 = self.img_width/2 - self.img_width/8 #왼쪽 가운데선
-        line2 = self.img_width/2 + self.img_width/8 #오른쪽 가운데선
+    def lidar_callback(self, msg):
+        self.angle_min = msg.angle_min
+        self.angle_max = msg.angle_max
+        self.ranges = msg.ranges
+        self.angle_increment = msg.angle_increment
+        
+    def convert_depth_image(self, ros_image):
+        bridge = CvBridge()
+        if self.mark_state==0 or self.mark_state==1:
+            pass
+        else:
+            depth_image = bridge.imgmsg_to_cv2(ros_image, desired_encoding="passthrough") #Convert the depth image using the default passthrough encoding
+            depth_array = np.array(depth_image, dtype=np.float32) #Convert the depth image to a Numpy array
+            idx_x = int(self.map_func(self.box_center_x, 0, self.img_width, 0, depth_array.shape[0]))
+            idx_y = int(self.map_func(self.box_center_y, 0, self.img_height, 0, depth_array.shape[1]))
+            self.box_depth = depth_array[idx_x, idx_y]
+
+    def target_tracking(self):
+        line1 = self.img_width/2 - self.img_width/10 #왼쪽 가운데선
+        line2 = self.img_width/2 + self.img_width/10 #오른쪽 가운데선
         pixel_from_center = self.target_center_x - self.img_width/2 #박스 중점 x축이 중앙으로부터 얼마나 떨어졌나. 왼쪽에 있으면 (-)값
-        if self.target_center_x > line1 and self.target_center_x < line2:
-            return True
+        print("-------img_width", self.img_width)
+        print("-------line", line1, line2)
+        print("-------target center", self.target_center_x)
+        print("-------pixel from center", pixel_from_center)
+
+        if self.target_center_x < line1: #타겟이 왼쪽에 있음. 왼쪽으로 이동해야 함
+            rotate_angle = self.map_func(self.target_center_x, 0, line1, -45, -9)
+            self.target_loc = "Left"
+        elif self.target_center_x > line2: #타겟이 오른쪽에 있음. 오른쪽으로 이동해야 함
+            rotate_angle = self.map_func(self.target_center_x, line2, self.img_width, 9, 45)
+            self.target_loc = "Right"
         else:
+            rotate_angle = self.map_func(self.target_center_x, line1, line2, -9, 9)# / 2 #나누는 거 뺄까? 너무 예민하게 움직일까봐 넣은 거긴 한뎅
+            self.target_loc = "Center"
+        
+        if self.first_box_position == "None":
+            self.first_box_position = self.target_loc
+
+        self.fir_rotate_angle = rotate_angle
+        angle_servo = self.map_func(rotate_angle, -45, 45, 80, 106)
+        return angle_servo
+
+    def station_detect(self, fir_angle_servo):
+        if len(self.ranges)==0 or min(self.ranges) > 1.5: #거리 임의 설정함:
+            self.ob_state = 0
+            return fir_angle_servo
+        else:
+            print("LIDAR MODE-----------------------------")
+            self.ob_state = 1
+            near_points_angles = []
+            if self.target_loc=="Left":
+                for i in range(len(self.ranges)):
+                    if self.ranges[i] < 1.5:
+                        angle = LiDARDEG2DEG(math.degrees(self.angle_min + self.angle_increment * i))
+                        if angle < 0:
+                            near_points_angles.append(angle)
+                if len(near_points_angles) != 0:
+                    self.ob_angle = min(near_points_angles) #음수값이므로 min으로 뽑음
+                else:
+                    self.ob_state = 0
+                    return fir_angle_servo
+            elif self.target_loc=="Right":
+                for i in range(len(self.ranges)):
+                    if self.ranges[i] < 1.5:
+                        angle = LiDARDEG2DEG(math.degrees(self.angle_min + self.angle_increment * i))
+                        if angle > 0:
+                            near_points_angles.append(angle)
+                if len(near_points_angles) != 0:
+                    self.ob_angle = max(near_points_angles)
+                else:
+                    self.ob_state = 0
+                    return fir_angle_servo
+            else:
+                if self.first_box_position == "Left":
+                    self.ob_angle = -20
+                    print("ine 452")
+                elif self.first_box_position == "Right":
+                    self.ob_angle = 20
+                    print("ine 455")
+                else:
+                    self.ob_angle = self.fir_rotate_angle
+                    print("ine 458")
+
+            angle_servo = self.map_func(self.ob_angle, -90, 90, 68, 118)
+            return angle_servo
+
+    def state_judge(self):
+        if self.mark_state==0:
+                self.control_publish(thruster=1600)
+        elif self.mark_state==1:
+            self.control_publish(thruster=1400) #후진 속도? 방향은? 이후 쭉 돌아봐야 타겟을 찾지...
+        else:
+            fir_angle_servo = self.target_tracking()
+            sec_angle_servo = self.station_detect(fir_angle_servo)
+            self.control_publish(servo=sec_angle_servo)
+
+    def map_func(self, x, input_min, input_max, output_min, output_max):
+        if x > input_max:
+            x = input_max
+        elif x < input_min:
+            x = input_min
+
+        return (x-input_min)*(output_max-output_min)/(input_max-input_min)+output_min
+
+    def control_publish(self, servo=94, thruster=1600):
+        self.servo = servo
+        self.thruster = thruster
+        control = Control()
+        control.thruster = thruster
+        control.servo = round(servo) #PID control add?
+        self.thruster_pub.publish(control.thruster)
+        self.servo_pub.publish(control.servo)
+
+
+    def dock_finished(self):
+        # return False
+        if self.mark_state == 0:
             return False
-
-    def go_backward(self):
-        print("go backward")
-        #pwm = 1400 (5~7 sec)
-        start_time = time.time()
-        end_time = time.time()
-        delta_time = end_time - start_time
-
-        self.forward_or_backward="go backward"
-        
-        while delta_time <= 4:
-            control = Control()
-            control.thruster = 1400
-            control.servo = 93
-            self.thruster_pub.publish(control.thruster)
-            self.servo_pub.publish(control.servo)
-
-            end_time = time.time()
-            delta_time = end_time - start_time
-        self.thruster_pub.publish(1500)
-        self.servo_pub.publish(93)
-        print("back move done")
-
-
-    def go_forward(self):
-        print("go forward")
-        #pwm = 1700, servo = 93 (직진)
-        start_time = time.time()
-        end_time = time.time()
-        delta_time = end_time - start_time
-        
-        self.forward_or_backward="go forward"
-
-        while delta_time <= 10:
-            control = Control()
-            control.thruster = 1620
-            control.servo = 93
-            self.thruster_pub.publish(control.thruster)
-            self.servo_pub.publish(control.servo)
-            
-            end_time = time.time()
-            delta_time = end_time - start_time
-        print("move done")
-        #self.thruster_pub.publish(1500)
-        #self.servo_pub.publish(93)
-
-    def prt(self): ####main에 추가
-        print_list = []
-        #print_list.append("now gps: {0}".format(gps좌표))
-            
-        if self.checked_mark==0: 
-            print_list.append("should move: point1")
-        elif self.checked_mark==1: #len(self.checked_mark)==1:
-            print_list.append("should move: point2")
-        elif self.checked_mark==2:
-            print_list.append("should move: point3")
-        
-        if self.hopping_ing ==0:
-            print_list.append("hopping X")
         else:
-            print_list.append("hopping O")
+            return (self.target_distance <= 1.5) # finished-> True
+    
+    # def reset_state(self):
+    #     self.mark_state = 0 
+    #     self.ob_state = 0
+    
+    def board_print(self):
+        print_list = []
+        print_list.append("{0:^5} | {1:^15} | {2:^5}".format("", "target", ""))
+        print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format("", "cls", "far", "not", "none"))
+        print_list.append("{0:-^5}-+-{1:-^15}-+-{2:-^5}".format("", "", ""))
+
+        if self.mark_state==0:
+            if self.ob_state==0:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format("ob", "", "", "", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format("none", "", "", "", "O"))
+            else:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "", "", "", "O"))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "", "", "", ""))
+        elif self.mark_state==1:
+            if self.ob_state==0:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "", "", "", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "", "", "O", ""))
+            else:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "", "", "O", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "", "", "", ""))
+        elif self.mark_state==2:
+            if self.ob_state==0:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "", "", "", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "", "O", "", ""))
+            else:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "", "O", "", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "", "", "", ""))
+        elif self.mark_state==3:
+            if self.ob_state==0:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "", "", "", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "O", "", "", ""))
+            else:
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" ob", "O", "", "", ""))
+                print_list.append("{0:^5} | {1:^3} | {2:^3} | {3:^3} | {4:^5}".format(" none", "", "", "", ""))
+
+        if self.mark_state > 1:
+            print_list.append("# {0:10} : {1}".format("tgt dist", round(self.target_distance, 2)))
+            print_list.append("# {0:10} : {1}".format("tgt loc", self.target_loc))
+            print_list.append("# {0:10} : {1}".format("rotate_angle(tgt)", self.fir_rotate_angle))
+            print_list.append("# {0:10} : {1}".format("start_loc", self.first_box_position))
+        elif self.mark_state == 1:
+            print_list.append("# {0:10} : {1}".format("watching", self.classes))
+        if self.ob_state==1:
+            print_list.append("# {0:10} : {1}".format("ob dist", round(min(self.ranges), 2)))
+            print_list.append("# {0:10} : {1}".format("ob angle", round(self.ob_angle)))
         
-        print_list.append(self.mark_state)
-        print_list.append(self.is_target_result)
-        print_list.append(self.forward_or_backward)
+        print_list.append("# {0:10} : {1}".format("servo", self.servo))
+        print_list.append("# {0:10} : {1}".format("thruster", self.thruster))
 
         self.print_node.publish(print_list)
 
-################## Hopping #############################
-class Hopping:
-    def __init__(self):
-        self.boat_x = 0.0
-        self.boat_y = 0.0
 
-        rospy.Subscriber("/imu/data", Imu, self.yaw_rate_callback)
-        rospy.Subscriber("/bearing", HeadingAngle, self.heading_callback)
-        rospy.Subscriber("/enu_position", Point, self.enu_callback)
-
-        ## ENU & Waypoint List
-        self.map_list = rospy.get_param("map_dd")
-        self.lat_00, self.lon_00, self.alt_00 = self.map_list['map_00_lat'], self.map_list['map_00_lon'], self.map_list['map_00_alt']
-
-        # self.waypoints = rospy.get_param("waypoint_List/waypoints")
-        # self.way_list_gps = np.empty((0,3), float)
-        # for i in range(len(self.waypoints)):
-        #     self.way_list_gps = np.append(self.way_list_gps, np.array([self.waypoints[i]]), axis=0)
-        # #self.way_list_gps = self.way_list_gps.astype(np.float64)
-        # self.goal_list = self.get_xy(self.way_list_gps) # ENU way list
-        # self.goal_x = self.goal_list[0][0]
-        # self.goal_y = self.goal_list[0][1]
-        
-        self.goal_range = rospy.get_param("goal_range")
-        
-        ## Direction Search
-        self.angle = 0.0
-        self.bearing = 0.0
-
-        ## PID 
-        self.init_servo = 93
-        self.servo_control = 0
-        self.errSum = 0.0
-        self.yaw_rate = 0.0
-
-        self.thrust = 0
-
-        self.kp_servo = rospy.get_param("kp_servo")
-        self.ki_servo = rospy.get_param("ki_servo")
-        self.kd_servo = rospy.get_param("kd_servo")
-        self.thruster_power = rospy.get_param("thruster_power")
-        self.kp_distance = rospy.get_param("kp_distance")
-
-
-        #### 호핑 goal list 먹이기
-        self.isDone = False
-
-        self.docking_config = rospy.get_param("docking_param")
-        self.point_1 = self.docking_config['point_1']
-        self.point_2 = self.docking_config['point_2']
-        self.point_3 = self.docking_config['point_3']
-        
-        self.point_1_list = np.empty((0,3), float)
-        for i in range(len(self.point_1)):
-            self.point_1_list = np.append(self.point_1_list, np.array([self.point_1[i]]), axis=0)
-        self.goal_list_1 = self.get_xy(self.point_1_list) # ENU way list
-        
-
-        self.point_2_list = np.empty((0,3), float)
-        for i in range(len(self.point_2)):
-            self.point_2_list = np.append(self.point_2_list, np.array([self.point_2[i]]), axis=0)
-        self.goal_list_2 = self.get_xy(self.point_2_list) # ENU way list
-
-        self.point_3_list = np.empty((0,3), float)
-        for i in range(len(self.point_3)):
-            self.point_3_list = np.append(self.point_3_list, np.array([self.point_3[i]]), axis=0)
-        self.goal_list_3 = self.get_xy(self.point_3_list) # ENU way list
-
-        self.goal_x = 0.0
-        self.goal_y = 0.0
-        
-        self.servo_pub = rospy.Publisher("/Servo", UInt16, queue_size=10)
-        self.thruster_pub = rospy.Publisher("/thruster", UInt16, queue_size=10)
-
-    def get_xy(self, points):
-        way_list = np.zeros_like(points)
-        for i in range(len(points)):
-            way_list[i][0], way_list[i][1] , way_list[i][2] = \
-                pm.geodetic2enu(points[i][0], points[i][1], points[i][2], \
-                 self.lat_00, self.lon_00, self.alt_00)
-        way_list = np.delete(way_list, 2, axis=1) # axis z delete
-        return way_list
-
-    def yaw_rate_callback(self, data):
-        self.yaw_rate = data.angular_velocity.z  # yaw_rate [rad/s]
-
-    def heading_callback(self, data):
-        self.bearing = data.bearing
-
-    def enu_callback(self, data):
-        self.boat_x = data.x  # East
-        self.boat_y = data.y  # North
-
-    def OPTIMAL_DIRECTION(self, b):
-        dx = self.goal_x - self.boat_x
-        dy = self.goal_y - self.boat_y
-        self.angle = RAD2DEG(math.atan2(dx, dy))
-
-        if dx >= 0 and dy >= 0: # Quadrant 1
-            if b >= 0 : # right bearing
-                self.t = self.angle - b
-            elif b < 0: # left bearing
-                if abs(b) < (180 - self.angle):
-                    self.t = self.angle - b
-                elif abs(b) >= (180 - self.angle):
-                    self.t = -(360 - self.angle + b)
-
-        elif dx < 0 and dy >= 0: # Quadrant 2
-            if b >= 0 :
-                if b < 180 + self.angle:
-                    self.t = self.angle - b
-                elif b >= 180 + self.angle:
-                    self.t = 360 + self.angle - b
-            elif b < 0:
-                self.t = self.angle - b
-                
-        elif dx < 0 and dy < 0: # Quadrant 3
-            if b >= 0 :
-                if b < 180 + self.angle:
-                    self.t = (self.angle - b)
-                elif b >= 180 + self.angle:
-                    self.t = 360 + (self.angle - b)
-            elif b < 0:
-                self.t = (self.angle - b)
-
-        elif dx >= 0 and dy < 0: # Quadrant 4
-            if b >= 0 :
-                self.t = (self.angle - b)
-            elif b < 0:
-                if abs(b) < 180 - self.angle:
-                    self.t = (self.angle - b)
-                elif abs(b) >= 180 - self.angle:
-                    self.t = self.angle - b - 360
-
-        return self.t
-
-    def target(self):
-        return self.OPTIMAL_DIRECTION(self.bearing)
-
-    def set_next_point(self):
-        self.goal_list = np.delete(self.goal_list, 0, axis = 0)
-
-    def arrival_check(self):
-        self.dist_to_goal = math.hypot(self.boat_x - self.goal_x, self.boat_y - self.goal_y)
-        
-        if self.dist_to_goal <= self.goal_range:
-            return True
-        else:
-            return False
-
-    #####################추가##################
-    def next_waypoint(self, state):
-        if state==1:
-            self.goal_list = self.goal_list_1
-            print("station1")
-        elif state==2:
-            self.goal_list = self.goal_list_2
-            print("station2")
-        elif state==3:
-            self.goal_list = self.goal_list_3
-            print("station3")
-        
-        self.goal_x = self.goal_list[0][0]
-        self.goal_y = self.goal_list[0][1]
-        print("goal: ", self.goal_x, self.goal_y)
-
-    def prt(self):
-        if self.servo_control > 93+3: # left turn
-            turn = "left"
-        elif self.servo_control < 93-3: # right turn
-            turn = "right"
-        else:
-            turn = "mid"
-        print("distance, thruster : ", self.dist_to_goal, self.thrust)
-        print("my xy : ",self.boat_x, self.boat_y)
-        print("way xy : ",self.goal_x, self.goal_y)
-        print("a, b, t : ", self.angle, self.bearing, self.OPTIMAL_DIRECTION(self.bearing))
-        print("servo : " + turn, round(self.servo_control))
-        print("errSum:", self.errSum)
-        print('-------------------------------------')
-    
-    def servo_pid_controller(self):
-        # P ctrl
-        error_angle = self.target() # deg
-
-        # I ctrl
-        self.errSum += (error_angle * 0.1)
-        
-        if self.errSum > 90:
-            self.errSum = 90
-        elif self.errSum < -90:
-            self.errSum = -90
-        else:
-            pass
-
-        # D ctrl
-        yaw_rate = RAD2DEG(self.yaw_rate) # deg/s
-
-
-        cp_servo = self.kp_servo * error_angle
-        ci_servo = self.ki_servo * self.errSum
-        cd_servo = self.kd_servo * -yaw_rate
-
-        servo_pid = -(cp_servo + ci_servo + cd_servo)
-        self.servo_control = self.init_servo + servo_pid
-
-        if self.servo_control > 93+45: #94+24
-            self.servo_control = 93+45
-        elif self.servo_control < 93-45:
-            self.servo_control = 93-45
-        else:
-            pass
-
-        return self.servo_control
-
-    def control_publisher(self):
-        ## propotional ctrl for thruster
-        self.thrust = int(1590 + self.kp_distance * self.dist_to_goal)
-        if self.thrust > self.thruster_power:
-            self.thrust = self.thruster_power
-        else:
-            pass
-        output_msg = Control()
-        output_msg.thruster = self.thrust # self.thruster_power
-        output_msg.servo = round(self.servo_pid_controller())
-        self.thruster_pub.publish(output_msg.thruster)
-        self.servo_pub.publish(output_msg.servo)
-
-
-def main():
+def main():   
     rospy.init_node('DockingMission', anonymous=False)
     rate = rospy.Rate(10)
 
@@ -723,50 +591,28 @@ def main():
         
         rate.sleep() 
     
- #waypoint2에 왔다고 가정--------------------
-    docking = Docking()
-    goal = Hopping()
-    state = 0 #7->4가야 함=1, ...2, ...3
 
-    state = docking.search_station()
-    print("state : ", state)
-    goal.next_waypoint(state)
-    docking.prt()
+    docking = Docking()
+    print("{:=^40}".format(" Docking Start "))
+
+    tick = 0
+    docking.board_print()
+    
+    docking.state_judge()
+    # docking.reset_state()
 
     while not rospy.is_shutdown():
-        if not goal.isDone:
-            # print("hopping ------------")
-            if goal.arrival_check():
-                if len(goal.goal_list) == 0:
-                    goal.thruster_pub.publish(1500)
-                    goal.servo_pub.publish(93)
-                    goal.isDone = True
-                    #rospy.on_shutdown()
-                    print("arrived station entry -> isDocking")
-                elif len(goal.goal_list) == 1:
-                    goal.goal_x = goal.goal_list[0][0]
-                    goal.goal_y = goal.goal_list[0][1]
-                    goal.set_next_point()
-                    goal.errSum = 0.0 # error initialization
-                    print("done second point")
-                else:
-                    goal.set_next_point()
-                    goal.goal_x = goal.goal_list[0][0]
-                    goal.goal_y = goal.goal_list[0][1]
-                    goal.errSum = 0.0 # error initialization
-                    print("done first point, go second")
-
-            goal.control_publisher()
+        if docking.dock_finished():
+            print("{:=^40}".format(" Docking Finished "))
+            break
         else:
-            print("target????")
-            docking.is_target()
-            print("search next station")
-            state = docking.search_station()
-            print("state : ", state)
-            goal.next_waypoint(state)
-            goal.isDone = False
-        docking.prt()
-        
+            print("{:=^40}".format(" Not Finished "))
+            if tick>=10:
+                docking.board_print()
+                tick=0
+            docking.state_judge()
+            # docking.reset_state()
+        tick+=1
         rate.sleep()
     rospy.spin()
 

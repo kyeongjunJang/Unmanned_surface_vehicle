@@ -1,0 +1,4 @@
+OB : {
+decision_range : 2, #[m]
+min_confidence : 0.7 #0~1
+}
